@@ -16,6 +16,7 @@ public static class TenantPermissions
     public const string FacilityWrite = "facility.write";
     public const string FacilityDelete = "facility.delete";
     public const string MembershipManage = "membership.manage";
+    public const string MembershipRoleAssignSystem = "membership.role.assign.system";
 }
 
 public static class OrganizationScopeTypes
