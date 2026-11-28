@@ -36,7 +36,7 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
             .Where(value => value.TenantId == tenantId &&
                             value.Code == membership.Role &&
                             value.IsActive)
-            .Select(value => new { value.Id, value.Code })
+            .Select(value => new { value.Id, value.Code, value.IsSystem })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (role is null)
@@ -53,7 +53,7 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
         // Unknown or explicitly gated permissions must fail closed. In particular,
         // IPD permissions are catalogue-known but intentionally non-assignable.
         if (permissions.Length == 0 ||
-            permissions.Any(permission => !TenantPermissionCatalog.IsAssignable(permission)))
+            permissions.Any(permission => !IsValidPermissionForRole(permission, role.IsSystem)))
             return null;
 
         var scopes = membership.Scopes
@@ -64,6 +64,13 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
             .ToArray();
 
         return new TenantMembershipAuthorization(membership.Id, role.Code, scopes, permissions);
+    }
+
+    private static bool IsValidPermissionForRole(string permissionCode, bool isSystemRole)
+    {
+        var definition = TenantPermissionCatalog.Find(permissionCode);
+        return definition is not null &&
+               (definition.IsAssignable || (isSystemRole && definition.IsSystemOnly));
     }
 
     public async Task<TenantMembershipPage<UserTenantContextDto>> ListActiveTenantContextsAsync(
@@ -120,7 +127,7 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
             .Where(value => tenantIds.Contains(value.TenantId) &&
                             roleCodes.Contains(value.Code) &&
                             value.IsActive)
-            .Select(value => new { value.TenantId, value.Code, value.Id })
+            .Select(value => new { value.TenantId, value.Code, value.Id, value.IsSystem })
             .ToListAsync(cancellationToken);
         var roleIds = roles.Select(value => value.Id).ToArray();
         var grants = await db.TenantRolePermissions
@@ -150,7 +157,7 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
                 if (!rolesByTenantAndCode.TryGetValue((value.TenantId, value.Role), out var role) ||
                     !grantsByRoleId.TryGetValue(role.Id, out var permissions) ||
                     permissions.Count == 0 ||
-                    permissions.Any(permission => !TenantPermissionCatalog.IsAssignable(permission)))
+                    permissions.Any(permission => !IsValidPermissionForRole(permission, role.IsSystem)))
                     return null;
 
                 var scopes = value.Scopes
