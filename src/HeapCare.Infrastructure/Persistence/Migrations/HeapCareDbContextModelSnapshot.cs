@@ -1521,7 +1521,12 @@ namespace HeapCare.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "IsActive", "IsSystem");
 
-                    b.ToTable("tenant_roles", (string)null);
+                    b.ToTable("tenant_roles", (string)null, t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_tenant_roles_permissions_revision",
+                                "\"PermissionsRevision\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRolePermission", b =>
