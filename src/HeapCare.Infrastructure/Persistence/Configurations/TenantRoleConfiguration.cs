@@ -45,6 +45,10 @@ public sealed class TenantRoleChangeAuditConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.ActorIssuer).HasMaxLength(255).IsRequired();
         builder.Property(x => x.ActorSubject).HasMaxLength(255).IsRequired();
         builder.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.PreviousName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.NewName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.PreviousDescription).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.NewDescription).HasMaxLength(500).IsRequired();
         builder.Property(x => x.PreviousPermissionCodesJson).HasColumnType("jsonb").IsRequired();
         builder.Property(x => x.NewPermissionCodesJson).HasColumnType("jsonb").IsRequired();
         builder.HasOne<TenantRole>().WithMany()
