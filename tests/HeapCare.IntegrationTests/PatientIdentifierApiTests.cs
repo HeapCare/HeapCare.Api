@@ -279,6 +279,8 @@ public sealed class PatientIdentifierApiTests(FacilityApiFactory factory)
             await db.SaveChangesAsync();
         }
 
+        await factory.SeedSystemRolesAsync(tenantId);
+
         var membership = new TenantMembership
         {
             TenantId = tenantId,
