@@ -90,6 +90,42 @@ public sealed class FacilityApiFactory : WebApplicationFactory<Program>
                 Slug = $"test-{tenantId:N}",
                 Status = TenantStatuses.Active
             });
+            await db.SaveChangesAsync();
+        }
+
+        var existingSystemRoles = await db.TenantRoles
+            .Where(value => value.TenantId == tenantId && value.IsSystem)
+            .ToListAsync();
+        if (existingSystemRoles.Count == 0)
+        {
+            foreach (var definition in TenantPermissionCatalog.SystemRoles)
+            {
+                var role = new TenantRole
+                {
+                    TenantId = tenantId,
+                    Code = definition.Code,
+                    Name = definition.DisplayName,
+                    Description = definition.Description,
+                    IsSystem = true,
+                    IsActive = true,
+                    PermissionsRevision = 0
+                };
+                db.TenantRoles.Add(role);
+                foreach (var permissionCode in definition.PermissionCodes)
+                {
+                    db.TenantRolePermissions.Add(new TenantRolePermission
+                    {
+                        TenantId = tenantId,
+                        RoleId = role.Id,
+                        PermissionCode = permissionCode
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+        else if (existingSystemRoles.Count != TenantPermissionCatalog.SystemRoles.Count)
+        {
+            throw new InvalidOperationException("Test tenant system role seed is incomplete.");
         }
 
         var membership = new TenantMembership
