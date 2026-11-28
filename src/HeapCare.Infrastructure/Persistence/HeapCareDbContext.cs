@@ -73,10 +73,6 @@ public sealed class HeapCareDbContext(
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<TenantRoleChangeAudit>().HasOne<Tenant>().WithMany()
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
-        modelBuilder.Entity<TenantMembership>().HasOne<TenantRole>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.Role })
-            .HasPrincipalKey(x => new { x.TenantId, x.Code })
-            .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<TenantMembership>().HasOne<Tenant>().WithMany()
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<TenantMembershipScope>().HasOne<Tenant>().WithMany()
@@ -189,7 +185,7 @@ public sealed class HeapCareDbContext(
 
         foreach (var entry in ChangeTracker.Entries<TenantRole>())
         {
-            if (entry.State is EntityState.Modified or EntityState.Deleted &&
+            if ((entry.State is EntityState.Modified or EntityState.Deleted) &&
                 entry.Entity.IsSystem)
                 throw new InvalidOperationException("System tenant roles are immutable.");
         }
