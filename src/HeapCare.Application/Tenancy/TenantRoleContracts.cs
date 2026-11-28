@@ -34,6 +34,7 @@ public sealed record TenantRoleAdministrationResult<T>(T? Value, string? Error, 
 
 public interface ITenantRoleAdministrationService
 {
+    Task<IReadOnlyList<TenantPermissionDefinition>> ListAssignablePermissionsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<TenantRoleDto>> ListAsync(CancellationToken cancellationToken);
     Task<TenantRoleAdministrationResult<TenantRoleDto>> CreateAsync(
         TenantRoleCreateInput input,
