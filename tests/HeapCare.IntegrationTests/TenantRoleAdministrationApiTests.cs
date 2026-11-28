@@ -106,9 +106,9 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
             .Where(value => value.TenantId == tenantId && value.RoleId == createdRole.Id)
             .OrderBy(value => value.CreatedAtUtc)
             .ToListAsync();
-        Assert.Equal(2, roleAudits.Count);
-        Assert.Equal("Created", roleAudits[0].Action);
-        Assert.Equal("PermissionsUpdated", roleAudits[1].Action);
+        Assert.Equal(
+            new[] { "Created", "PermissionsUpdated" },
+            roleAudits.Select(value => value.Action));
         Assert.Equal("rbac-tenant-admin", roleAudits[1].ActorSubject);
         Assert.Equal(string.Empty, roleAudits[0].PreviousName);
         Assert.Equal("Facility Read Only", roleAudits[0].NewName);
