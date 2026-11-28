@@ -187,8 +187,9 @@ public sealed class HeapCareDbContext(
         {
             if (entry.State == EntityState.Deleted)
                 throw new InvalidOperationException("Tenant roles are retained and must be deactivated instead of deleted.");
-            if (entry.State == EntityState.Modified && entry.Entity.IsSystem)
-                throw new InvalidOperationException("System tenant roles are immutable.");
+            if (entry.State == EntityState.Modified &&
+                (entry.Property(nameof(TenantRole.IsSystem)).OriginalValue is true || entry.Entity.IsSystem))
+                throw new InvalidOperationException("System tenant roles are immutable and cannot be converted to custom roles.");
         }
 
         foreach (var entry in ChangeTracker.Entries<TenantRoleChangeAudit>())
