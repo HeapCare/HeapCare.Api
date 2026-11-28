@@ -198,6 +198,7 @@ public partial class AddPersistedTenantRolesAndPermissions : Migration
                 ('HospitalAdmin', 'facility.write'),
                 ('HospitalAdmin', 'facility.delete'),
                 ('HospitalAdmin', 'membership.manage'),
+                ('HospitalAdmin', 'membership.role.assign.system'),
                 ('HospitalAdmin', 'audit.read'),
                 ('HospitalAdmin', 'patient.read'),
                 ('HospitalAdmin', 'patient.identity.read'),
