@@ -20,6 +20,12 @@ public static class TenantRoleEndpoints
                 Results.Ok(await service.ListAsync(cancellationToken)))
             .WithName("ListTenantRoles");
 
+        group.MapGet("/permissions", async (
+                ITenantRoleAdministrationService service,
+                CancellationToken cancellationToken) =>
+                Results.Ok(await service.ListAssignablePermissionsAsync(cancellationToken)))
+            .WithName("ListAssignableTenantRolePermissions");
+
         group.MapPost("/", async (
                 HttpContext context,
                 TenantRoleCreateRequest request,
