@@ -75,10 +75,11 @@ public sealed class TenantRoleAdministrationService(
                 Permissions = grantsByRole.GetValueOrDefault(role.Id) ?? Array.Empty<string>()
             })
             .Where(value =>
-                value.Permissions.Count > 0 &&
-                value.Permissions.All(permission =>
+                value.Role.IsSystem ||
+                (value.Permissions.Count > 0 &&
+                 value.Permissions.All(permission =>
                     TenantPermissionCatalog.IsAssignable(permission) &&
-                    permissionContext.HasPermission(permission)))
+                    permissionContext.HasPermission(permission))))
             .Select(value => ToDto(value.Role, value.Permissions))
             .ToArray();
     }
