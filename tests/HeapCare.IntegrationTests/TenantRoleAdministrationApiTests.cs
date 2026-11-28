@@ -185,6 +185,61 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
     }
 
     [Fact]
+    public async Task DelegatedMembershipAdministrator_CannotAssignPermissionsBeyondTheirOwnGrantSet()
+    {
+        factory.ResetDatabase();
+        var tenantId = Guid.NewGuid();
+        await factory.SeedTenantMembershipAsync(
+            tenantId,
+            TenantRoles.HospitalAdmin,
+            subject: "rbac-root-admin");
+
+        using var rootAdmin = CreateClient("rbac-root-admin", tenantId);
+        var createDelegatedRole = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/roles",
+            new
+            {
+                name = "Membership Delegator",
+                description = "May manage memberships but cannot grant operational permissions.",
+                permissionCodes = new[] { TenantPermissions.MembershipManage },
+                reason = "Create a least-privilege membership administrator."
+            });
+        Assert.Equal(HttpStatusCode.Created, createDelegatedRole.StatusCode);
+        var delegatedRole = await createDelegatedRole.Content.ReadFromJsonAsync<TenantRoleResponse>();
+        Assert.NotNull(delegatedRole);
+
+        var createDelegatedMembership = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/memberships",
+            new
+            {
+                issuer = TestJwtTokenFactory.Issuer,
+                subject = "rbac-delegated-admin",
+                role = delegatedRole!.Code,
+                scopes = new[] { new { scopeType = OrganizationScopeTypes.Tenant } }
+            });
+        Assert.Equal(HttpStatusCode.Created, createDelegatedMembership.StatusCode);
+
+        using var delegatedAdmin = CreateClient("rbac-delegated-admin", tenantId);
+        var escalationAttempt = await delegatedAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/memberships",
+            new
+            {
+                issuer = TestJwtTokenFactory.Issuer,
+                subject = "rbac-escalation-target",
+                role = TenantRoles.FacilityManager,
+                scopes = new[] { new { scopeType = OrganizationScopeTypes.Tenant } }
+            });
+
+        Assert.Equal(HttpStatusCode.Forbidden, escalationAttempt.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<HeapCareDbContext>();
+        Assert.False(await db.TenantMemberships.AnyAsync(
+            value => value.Subject == "rbac-escalation-target"));
+    }
+
+    [Fact]
     public async Task SystemRolesCannotBeChanged_AndCustomRoleCannotBeDeactivatedWhileAssigned()
     {
         factory.ResetDatabase();
