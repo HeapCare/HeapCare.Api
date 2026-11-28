@@ -65,9 +65,22 @@ public sealed class TenantRoleAdministrationService(
                     .OrderBy(value => value, StringComparer.Ordinal)
                     .ToArray());
 
-        return roles.Select(role => ToDto(
-            role,
-            grantsByRole.GetValueOrDefault(role.Id) ?? Array.Empty<string>())).ToArray();
+        // A membership administrator may see only roles whose complete grants
+        // are within their own delegation authority. This prevents exposing
+        // or offering role definitions they are not allowed to reproduce.
+        return roles
+            .Select(role => new
+            {
+                Role = role,
+                Permissions = grantsByRole.GetValueOrDefault(role.Id) ?? Array.Empty<string>()
+            })
+            .Where(value =>
+                value.Permissions.Count > 0 &&
+                value.Permissions.All(permission =>
+                    TenantPermissionCatalog.IsAssignable(permission) &&
+                    permissionContext.HasPermission(permission)))
+            .Select(value => ToDto(value.Role, value.Permissions))
+            .ToArray();
     }
 
     public async Task<TenantRoleAdministrationResult<TenantRoleDto>> CreateAsync(
