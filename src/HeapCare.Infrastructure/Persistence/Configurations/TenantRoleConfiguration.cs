@@ -11,6 +11,7 @@ public sealed class TenantRoleConfiguration : IEntityTypeConfiguration<TenantRol
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.PermissionsRevision).HasDefaultValue(0).IsRequired();
         builder.HasAlternateKey(x => new { x.TenantId, x.Id });
         builder.HasAlternateKey(x => new { x.TenantId, x.Code });
         builder.HasIndex(x => new { x.TenantId, x.IsActive, x.IsSystem });
