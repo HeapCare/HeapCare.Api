@@ -36,6 +36,9 @@ public partial class AddPersistedTenantRolesAndPermissions : Migration
                 table.PrimaryKey("PK_tenant_roles", x => x.Id);
                 table.UniqueConstraint("AK_tenant_roles_TenantId_Id", x => new { x.TenantId, x.Id });
                 table.UniqueConstraint("AK_tenant_roles_TenantId_Code", x => new { x.TenantId, x.Code });
+                table.CheckConstraint(
+                    "CK_tenant_roles_permissions_revision",
+                    "\"PermissionsRevision\" >= 0");
                 table.ForeignKey(
                     name: "FK_tenant_roles_tenants_TenantId",
                     column: x => x.TenantId,
