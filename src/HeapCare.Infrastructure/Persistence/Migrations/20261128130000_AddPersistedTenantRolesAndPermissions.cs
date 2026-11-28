@@ -228,6 +228,11 @@ public partial class AddPersistedTenantRolesAndPermissions : Migration
             ON CONFLICT ("TenantId", "RoleId", "PermissionCode") DO NOTHING;
             """);
 
+        migrationBuilder.CreateIndex(
+            name: "IX_tenant_memberships_TenantId_Role",
+            table: "tenant_memberships",
+            columns: new[] { "TenantId", "Role" });
+
         migrationBuilder.AddForeignKey(
             name: "FK_tenant_memberships_tenant_roles_TenantId_Role",
             table: "tenant_memberships",
@@ -263,6 +268,10 @@ public partial class AddPersistedTenantRolesAndPermissions : Migration
     {
         migrationBuilder.DropForeignKey(
             name: "FK_tenant_memberships_tenant_roles_TenantId_Role",
+            table: "tenant_memberships");
+
+        migrationBuilder.DropIndex(
+            name: "IX_tenant_memberships_TenantId_Role",
             table: "tenant_memberships");
 
         migrationBuilder.Sql("""
