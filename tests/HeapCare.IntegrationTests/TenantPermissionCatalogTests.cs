@@ -57,6 +57,7 @@ public sealed class TenantPermissionCatalogTests
             TenantPermissions.FacilityWrite,
             TenantPermissions.FacilityDelete,
             TenantPermissions.MembershipManage,
+            TenantPermissions.MembershipRoleAssignSystem,
             AuditPermissions.Read,
             PatientPermissions.Read,
             PatientPermissions.IdentityRead,
@@ -136,10 +137,28 @@ public sealed class TenantPermissionCatalogTests
 
             foreach (var permissionCode in role.PermissionCodes)
             {
-                Assert.NotNull(TenantPermissionCatalog.Find(permissionCode));
-                Assert.True(TenantPermissionCatalog.IsAssignable(permissionCode));
+                var definition = TenantPermissionCatalog.Find(permissionCode);
+                Assert.NotNull(definition);
+                Assert.True(
+                    definition!.IsAssignable ||
+                    (role.Code == TenantRoles.HospitalAdmin && definition.IsSystemOnly));
             }
         }
+    }
+
+    [Fact]
+    public void SystemRoleAssignmentCapability_IsHeldOnlyByHospitalAdminAndCannotBeDelegated()
+    {
+        var permission = TenantPermissionCatalog.Find(TenantPermissions.MembershipRoleAssignSystem);
+        Assert.NotNull(permission);
+        Assert.False(permission!.IsAssignable);
+        Assert.True(permission.IsSystemOnly);
+
+        Assert.Contains(
+            TenantPermissions.MembershipRoleAssignSystem,
+            TenantPermissionCatalog.GetDefaultPermissions(TenantRoles.HospitalAdmin));
+        foreach (var role in TenantPermissionCatalog.SystemRoles.Where(value => value.Code != TenantRoles.HospitalAdmin))
+            Assert.DoesNotContain(TenantPermissions.MembershipRoleAssignSystem, role.PermissionCodes);
     }
 
     [Fact]
