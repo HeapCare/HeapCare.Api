@@ -157,6 +157,27 @@ public partial class AddPersistedTenantRolesAndPermissions : Migration
             ON CONFLICT ("TenantId", "Code") DO NOTHING;
             """);
 
+        // Preserve any pre-existing, unsupported membership role code as a
+        // disabled tenant role with no grants. Before this migration those codes
+        // already resolved to zero permissions and were denied; the mapping keeps
+        // the new composite membership FK safe without granting replacement access.
+        migrationBuilder.Sql("""
+            INSERT INTO "tenant_roles"
+                ("Id", "TenantId", "Code", "Name", "Description", "IsSystem", "IsActive",
+                 "PermissionsRevision", "CreatedAtUtc", "UpdatedAtUtc", "Version")
+            SELECT
+                gen_random_uuid(), m."TenantId", m."Role",
+                'Unmapped legacy role (disabled)',
+                'Preserved from a legacy membership; no permissions are assigned. Replace with an explicitly approved role.',
+                FALSE, FALSE, 0, NOW(), NOW(), gen_random_uuid()
+            FROM "tenant_memberships" AS m
+            WHERE NOT EXISTS (
+                SELECT 1 FROM "tenant_roles" AS r
+                WHERE r."TenantId" = m."TenantId" AND r."Code" = m."Role"
+            )
+            ON CONFLICT ("TenantId", "Code") DO NOTHING;
+            """);
+
         migrationBuilder.Sql("""
             INSERT INTO "tenant_role_permissions"
                 ("Id", "TenantId", "RoleId", "PermissionCode",
