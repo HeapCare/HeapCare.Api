@@ -40,6 +40,10 @@ public sealed class TenantRolePersistenceTests(FacilityApiFactory factory)
             new[] { nameof(TenantOwnedEntity.TenantId), nameof(TenantRole.Code) },
             membershipRoleFk.PrincipalKey.Properties.Select(property => property.Name));
 
+        Assert.Contains(
+            role.GetCheckConstraints(),
+            constraint => constraint.Name == "CK_tenant_roles_permissions_revision");
+
         var rolePermission = model.FindEntityType(typeof(TenantRolePermission))!;
         var uniqueGrantIndex = Assert.Single(rolePermission.GetIndexes(), index =>
             index.IsUnique &&
@@ -59,6 +63,51 @@ public sealed class TenantRolePersistenceTests(FacilityApiFactory factory)
         Assert.Contains(
             roleAudit.GetCheckConstraints(),
             constraint => constraint.Name == "CK_tenant_role_change_audits_action");
+    }
+
+    [Fact]
+    public async Task TenantRoles_CannotBePhysicallyDeletedOrDemotedFromSystemRole()
+    {
+        factory.ResetDatabase();
+        var tenantId = Guid.NewGuid();
+        await factory.SeedTenantMembershipAsync(
+            tenantId,
+            TenantRoles.HospitalAdmin,
+            subject: "role-immutability-actor");
+
+        using var scope = factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<HeapCareDbContext>();
+
+        var systemRole = await db.TenantRoles.SingleAsync(value => value.Code == TenantRoles.HospitalAdmin);
+        systemRole.IsSystem = false;
+        systemRole.Name = "Demoted System Role";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
+
+        var preservedSystemRole = await db.TenantRoles.AsNoTracking()
+            .SingleAsync(value => value.Code == TenantRoles.HospitalAdmin);
+        Assert.True(preservedSystemRole.IsSystem);
+        Assert.Equal("Hospital Administrator", preservedSystemRole.Name);
+
+        var customRole = new TenantRole
+        {
+            TenantId = tenantId,
+            Code = "custom_delete_guard",
+            Name = "Delete Guard",
+            Description = "A role that must be deactivated instead of deleted.",
+            IsSystem = false,
+            IsActive = true
+        };
+        db.TenantRoles.Add(customRole);
+        await db.SaveChangesAsync();
+
+        db.TenantRoles.Remove(customRole);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
+
+        Assert.True(await db.TenantRoles.AnyAsync(value => value.Id == customRole.Id));
     }
 
     [Fact]
