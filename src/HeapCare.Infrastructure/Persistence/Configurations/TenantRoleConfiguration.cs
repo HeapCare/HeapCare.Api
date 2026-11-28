@@ -7,7 +7,10 @@ public sealed class TenantRoleConfiguration : IEntityTypeConfiguration<TenantRol
 {
     public void Configure(EntityTypeBuilder<TenantRole> builder)
     {
-        builder.ToTable("tenant_roles");
+        builder.ToTable("tenant_roles", table =>
+            table.HasCheckConstraint(
+                "CK_tenant_roles_permissions_revision",
+                "\"PermissionsRevision\" >= 0"));
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(500).IsRequired();
