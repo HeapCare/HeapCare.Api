@@ -110,6 +110,14 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
         Assert.Equal("Created", roleAudits[0].Action);
         Assert.Equal("PermissionsUpdated", roleAudits[1].Action);
         Assert.Equal("rbac-tenant-admin", roleAudits[1].ActorSubject);
+        Assert.Equal(string.Empty, roleAudits[0].PreviousName);
+        Assert.Equal("Facility Read Only", roleAudits[0].NewName);
+        Assert.Equal(string.Empty, roleAudits[0].PreviousDescription);
+        Assert.Equal("Can read the facility hierarchy but cannot create or delete it.", roleAudits[0].NewDescription);
+        Assert.Equal("Facility Read Only", roleAudits[1].PreviousName);
+        Assert.Equal("Facility Creator", roleAudits[1].NewName);
+        Assert.Equal("Can read the facility hierarchy but cannot create or delete it.", roleAudits[1].PreviousDescription);
+        Assert.Equal("Can create or update facility structure but cannot read facility listings.", roleAudits[1].NewDescription);
         Assert.Equal("Create a restricted role for facility inspection.", roleAudits[0].Reason);
         Assert.Equal("Change the delegated capability to facility maintenance.", roleAudits[1].Reason);
 
