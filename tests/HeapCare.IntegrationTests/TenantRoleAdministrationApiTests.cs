@@ -383,6 +383,100 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, authorizedRead.StatusCode);
     }
 
+
+    [Fact]
+    public async Task MembershipReactivation_RejectsGrantsOutsideTheActorsCurrentDelegation()
+    {
+        factory.ResetDatabase();
+        var tenantId = Guid.NewGuid();
+        await factory.SeedTenantMembershipAsync(
+            tenantId,
+            TenantRoles.HospitalAdmin,
+            subject: "rbac-reactivation-root");
+
+        using var rootAdmin = CreateClient("rbac-reactivation-root", tenantId);
+        var createDormantRole = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/roles",
+            new
+            {
+                name = "Dormant Membership Manager",
+                description = "Initially grants membership management only.",
+                permissionCodes = new[] { TenantPermissions.MembershipManage },
+                reason = "Create a role for testing reactivation delegation."
+            });
+        Assert.Equal(HttpStatusCode.Created, createDormantRole.StatusCode);
+        var dormantRole = await createDormantRole.Content.ReadFromJsonAsync<TenantRoleResponse>();
+        Assert.NotNull(dormantRole);
+
+        var createTarget = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/memberships",
+            new
+            {
+                issuer = TestJwtTokenFactory.Issuer,
+                subject = "rbac-reactivation-delegation-target",
+                role = dormantRole!.Code,
+                scopes = new[] { new { scopeType = OrganizationScopeTypes.Tenant } }
+            });
+        Assert.Equal(HttpStatusCode.Created, createTarget.StatusCode);
+        var target = await createTarget.Content.ReadFromJsonAsync<TenantMembershipResponse>();
+        Assert.NotNull(target);
+
+        var deactivateTarget = await rootAdmin.PostAsync(
+            $"/api/v1/tenant/memberships/{target!.Id:D}/deactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.OK, deactivateTarget.StatusCode);
+
+        var createDelegateRole = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/roles",
+            new
+            {
+                name = "Restricted Membership Delegate",
+                description = "Can manage memberships but cannot grant facility access.",
+                permissionCodes = new[] { TenantPermissions.MembershipManage },
+                reason = "Create a restricted administrator for the delegation test."
+            });
+        Assert.Equal(HttpStatusCode.Created, createDelegateRole.StatusCode);
+        var delegateRole = await createDelegateRole.Content.ReadFromJsonAsync<TenantRoleResponse>();
+        Assert.NotNull(delegateRole);
+
+        var createDelegate = await rootAdmin.PostAsJsonAsync(
+            "/api/v1/tenant/memberships",
+            new
+            {
+                issuer = TestJwtTokenFactory.Issuer,
+                subject = "rbac-reactivation-delegate",
+                role = delegateRole!.Code,
+                scopes = new[] { new { scopeType = OrganizationScopeTypes.Tenant } }
+            });
+        Assert.Equal(HttpStatusCode.Created, createDelegate.StatusCode);
+
+        var expandDormantRole = await rootAdmin.PutAsJsonAsync(
+            $"/api/v1/tenant/roles/{dormantRole.Id:D}",
+            new
+            {
+                name = "Dormant Membership Manager",
+                description = "Now also grants facility read access.",
+                permissionCodes = new[]
+                {
+                    TenantPermissions.MembershipManage,
+                    TenantPermissions.FacilityRead
+                },
+                reason = "Verify reactivation checks the current persisted grants."
+            });
+        Assert.Equal(HttpStatusCode.OK, expandDormantRole.StatusCode);
+
+        using var delegatedAdmin = CreateClient("rbac-reactivation-delegate", tenantId);
+        var deniedReactivation = await delegatedAdmin.PostAsync(
+            $"/api/v1/tenant/memberships/{target.Id:D}/reactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedReactivation.StatusCode);
+
+        var allowedReactivation = await rootAdmin.PostAsync(
+            $"/api/v1/tenant/memberships/{target.Id:D}/reactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.OK, allowedReactivation.StatusCode);
+    }
+
     private HttpClient CreateClient(string subject, Guid tenantId)
     {
         var client = factory.CreateClient();
