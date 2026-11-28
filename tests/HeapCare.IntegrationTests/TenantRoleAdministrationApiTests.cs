@@ -220,6 +220,12 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
         Assert.Equal(HttpStatusCode.Created, createDelegatedMembership.StatusCode);
 
         using var delegatedAdmin = CreateClient("rbac-delegated-admin", tenantId);
+        var availablePermissions = await delegatedAdmin.GetFromJsonAsync<PermissionDefinitionResponse[]>(
+            "/api/v1/tenant/roles/permissions");
+        Assert.NotNull(availablePermissions);
+        var delegatedPermission = Assert.Single(availablePermissions!);
+        Assert.Equal(TenantPermissions.MembershipManage, delegatedPermission.Code);
+
         var escalationAttempt = await delegatedAdmin.PostAsJsonAsync(
             "/api/v1/tenant/memberships",
             new
@@ -321,6 +327,16 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
             tenantId.ToString("D"));
         return client;
     }
+
+    private sealed record PermissionDefinitionResponse(
+        string Code,
+        string Module,
+        string Resource,
+        string Action,
+        string DisplayName,
+        string Description,
+        TenantPermissionRisk Risk,
+        bool IsAssignable);
 
     private sealed record TenantRoleResponse(
         Guid Id,
