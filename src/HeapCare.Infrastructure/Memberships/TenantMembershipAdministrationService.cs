@@ -318,6 +318,18 @@ public sealed class TenantMembershipAdministrationService(
         if (membership.IsActive == isActive)
             return TenantMembershipResult<TenantMembershipDto>.Success(ToDto(membership));
 
+        // Reactivation is an effective role re-assignment: the linked role may have
+        // been edited or deactivated while this membership was inactive. Revalidate
+        // the current role, grants and actor delegation before restoring access.
+        if (isActive)
+        {
+            var roleValidation = await ValidateRoleAssignmentAsync(
+                membership.Role, tenantId, cancellationToken);
+            if (roleValidation.Error is not null)
+                return Failure<TenantMembershipDto>(
+                    roleValidation.Error, roleValidation.StatusCode);
+        }
+
         if (!isActive && IsTenantWideAdministrator(membership) &&
             !await HasAnotherTenantWideAdministratorAsync(
                 membership.Id, tenantId, cancellationToken))
