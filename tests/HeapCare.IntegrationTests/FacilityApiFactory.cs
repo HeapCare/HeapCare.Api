@@ -100,7 +100,7 @@ public sealed class FacilityApiFactory : WebApplicationFactory<Program>
         {
             foreach (var definition in TenantPermissionCatalog.SystemRoles)
             {
-                var role = new TenantRole
+                var systemRole = new TenantRole
                 {
                     TenantId = tenantId,
                     Code = definition.Code,
@@ -110,13 +110,13 @@ public sealed class FacilityApiFactory : WebApplicationFactory<Program>
                     IsActive = true,
                     PermissionsRevision = 0
                 };
-                db.TenantRoles.Add(role);
+                db.TenantRoles.Add(systemRole);
                 foreach (var permissionCode in definition.PermissionCodes)
                 {
                     db.TenantRolePermissions.Add(new TenantRolePermission
                     {
                         TenantId = tenantId,
-                        RoleId = role.Id,
+                        RoleId = systemRole.Id,
                         PermissionCode = permissionCode
                     });
                 }
