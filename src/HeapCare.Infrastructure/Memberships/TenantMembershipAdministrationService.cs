@@ -9,7 +9,8 @@ namespace HeapCare.Infrastructure.Memberships;
 public sealed class TenantMembershipAdministrationService(
     HeapCareDbContext db,
     ITenantContext tenantContext,
-    IOrganizationScopeContext organizationScopeContext) : ITenantMembershipAdministrationService
+    IOrganizationScopeContext organizationScopeContext,
+    ITenantPermissionContext permissionContext) : ITenantMembershipAdministrationService
 {
     public async Task<TenantMembershipPage<TenantMembershipDto>> ListAsync(
         TenantMembershipPageRequest page, CancellationToken cancellationToken)
@@ -84,6 +85,7 @@ public sealed class TenantMembershipAdministrationService(
             return Failure<TenantMembershipDto>("Tenant not found.", 404);
 
         tenantContext.SetTenant(tenantId);
+        await TenantRoleBootstrapper.EnsureSystemRolesAsync(db, tenantId, cancellationToken);
 
         var existing = await db.TenantMemberships.IgnoreQueryFilters()
             .Include(value => value.Scopes)
@@ -164,8 +166,9 @@ public sealed class TenantMembershipAdministrationService(
         {
             return Failure<TenantMembershipDto>(identityError!, 400);
         }
-        if (!TenantRoles.IsKnown(input.Role))
-            return Failure<TenantMembershipDto>("The requested tenant role is not supported.", 400);
+        var roleValidation = await ValidateRoleAssignmentAsync(input.Role, tenantId, cancellationToken);
+        if (roleValidation.Error is not null)
+            return Failure<TenantMembershipDto>(roleValidation.Error, roleValidation.StatusCode);
 
         var resolution = await ResolveScopesAsync(input.Scopes, cancellationToken);
         if (resolution.Error is not null)
@@ -215,8 +218,9 @@ public sealed class TenantMembershipAdministrationService(
             return Failure<TenantMembershipDto>("A non-empty membership identifier is required.", 400);
         if (organizationScopeContext.MembershipId == membershipId)
             return Failure<TenantMembershipDto>("Administrators cannot modify their own membership.", 409);
-        if (!TenantRoles.IsKnown(input.Role))
-            return Failure<TenantMembershipDto>("The requested tenant role is not supported.", 400);
+        var roleValidation = await ValidateRoleAssignmentAsync(input.Role, tenantId, cancellationToken);
+        if (roleValidation.Error is not null)
+            return Failure<TenantMembershipDto>(roleValidation.Error, roleValidation.StatusCode);
 
         var membership = await db.TenantMemberships.Include(value => value.Scopes)
             .SingleOrDefaultAsync(value => value.Id == membershipId, cancellationToken);
@@ -440,8 +444,46 @@ public sealed class TenantMembershipAdministrationService(
         scopes.Count > 0 && CanAssignScopes(scopes);
 
     private bool IsTenantAdministrator() =>
-        organizationScopeContext.Role == TenantRoles.HospitalAdmin &&
-        organizationScopeContext.MembershipId.HasValue;
+        organizationScopeContext.MembershipId.HasValue &&
+        permissionContext.HasPermission(TenantPermissions.MembershipManage);
+
+    private async Task<RoleAssignmentValidation> ValidateRoleAssignmentAsync(
+        string? roleCode,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(roleCode) || roleCode.Length > 50)
+            return RoleAssignmentValidation.Failure("A valid tenant role code is required.", 400);
+
+        var role = await db.TenantRoles
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                value => value.TenantId == tenantId &&
+                         value.Code == roleCode &&
+                         value.IsActive,
+                cancellationToken);
+        if (role is null)
+            return RoleAssignmentValidation.Failure("The requested tenant role is not active or does not exist.", 400);
+
+        var permissions = await db.TenantRolePermissions
+            .AsNoTracking()
+            .Where(value => value.TenantId == tenantId && value.RoleId == role.Id)
+            .Select(value => value.PermissionCode)
+            .ToArrayAsync(cancellationToken);
+
+        if (permissions.Length == 0 ||
+            permissions.Any(permission => !TenantPermissionCatalog.IsAssignable(permission)))
+            return RoleAssignmentValidation.Failure(
+                "The requested tenant role contains no valid grants or includes a gated permission.",
+                409);
+
+        if (permissions.Any(permission => !permissionContext.HasPermission(permission)))
+            return RoleAssignmentValidation.Failure(
+                "You cannot assign a role that grants permissions beyond your own delegated authority.",
+                403);
+
+        return RoleAssignmentValidation.Success();
+    }
 
     private bool TryGetTenantId(out Guid tenantId)
     {
@@ -585,6 +627,12 @@ public sealed class TenantMembershipAdministrationService(
         {
             SqlState: PostgresErrorCodes.UniqueViolation
         };
+
+    private sealed record RoleAssignmentValidation(string? Error, int StatusCode)
+    {
+        public static RoleAssignmentValidation Success() => new(null, 200);
+        public static RoleAssignmentValidation Failure(string error, int statusCode) => new(error, statusCode);
+    }
 
     private sealed record ScopeResolution(
         IReadOnlyList<OrganizationScope> Scopes,
