@@ -455,6 +455,9 @@ public sealed class TenantMembershipAdministrationService(
         if (string.IsNullOrWhiteSpace(roleCode) || roleCode.Length > 50)
             return RoleAssignmentValidation.Failure("A valid tenant role code is required.", 400);
 
+        if (!await LockRoleForShareAsync(tenantId, roleCode, cancellationToken))
+            return RoleAssignmentValidation.Failure("The requested tenant role is not active or does not exist.", 400);
+
         var role = await db.TenantRoles
             .AsNoTracking()
             .SingleOrDefaultAsync(
@@ -627,6 +630,37 @@ public sealed class TenantMembershipAdministrationService(
         {
             SqlState: PostgresErrorCodes.UniqueViolation
         };
+
+    private async Task<bool> LockRoleForShareAsync(
+        Guid tenantId,
+        string roleCode,
+        CancellationToken cancellationToken)
+    {
+        var transaction = db.Database.CurrentTransaction;
+        if (transaction is null)
+            throw new InvalidOperationException("Role assignment requires the audited request transaction.");
+
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandText = """
+            SELECT "Id" FROM "tenant_roles"
+            WHERE "TenantId" = @tenantId AND "Code" = @roleCode AND "IsActive" = TRUE
+            FOR SHARE
+            """;
+
+        var tenantParameter = command.CreateParameter();
+        tenantParameter.ParameterName = "tenantId";
+        tenantParameter.Value = tenantId;
+        command.Parameters.Add(tenantParameter);
+
+        var roleParameter = command.CreateParameter();
+        roleParameter.ParameterName = "roleCode";
+        roleParameter.Value = roleCode;
+        command.Parameters.Add(roleParameter);
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is not null and not DBNull;
+    }
 
     private sealed record RoleAssignmentValidation(string? Error, int StatusCode)
     {
