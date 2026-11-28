@@ -99,6 +99,10 @@ public sealed class TenantRoleAdministrationService(
             actorIssuer,
             actorSubject,
             input.Reason!,
+            string.Empty,
+            role.Name,
+            string.Empty,
+            role.Description,
             Array.Empty<string>(),
             permissionCodes));
 
@@ -149,6 +153,8 @@ public sealed class TenantRoleAdministrationService(
         if (role.IsSystem)
             return Failure<TenantRoleDto>("System roles are immutable. Create a custom role instead.", 409);
 
+        var previousName = role.Name;
+        var previousDescription = role.Description;
         var oldPermissions = await db.TenantRolePermissions
             .Where(value => value.TenantId == tenantId && value.RoleId == role.Id)
             .OrderBy(value => value.PermissionCode)
@@ -200,6 +206,10 @@ public sealed class TenantRoleAdministrationService(
             actorIssuer,
             actorSubject,
             input.Reason!,
+            previousName,
+            normalizedName!,
+            previousDescription,
+            normalizedDescription!,
             oldPermissions,
             newPermissions));
 
@@ -278,6 +288,10 @@ public sealed class TenantRoleAdministrationService(
             actorIssuer,
             actorSubject,
             reason!,
+            role.Name,
+            role.Name,
+            role.Description,
+            role.Description,
             permissions,
             permissions));
 
@@ -438,6 +452,10 @@ public sealed class TenantRoleAdministrationService(
         string actorIssuer,
         string actorSubject,
         string reason,
+        string previousName,
+        string newName,
+        string previousDescription,
+        string newDescription,
         IReadOnlyList<string> previousPermissions,
         IReadOnlyList<string> newPermissions) =>
         new()
@@ -448,6 +466,10 @@ public sealed class TenantRoleAdministrationService(
             ActorIssuer = actorIssuer,
             ActorSubject = actorSubject,
             Reason = reason.Trim(),
+            PreviousName = previousName,
+            NewName = newName,
+            PreviousDescription = previousDescription,
+            NewDescription = newDescription,
             PreviousPermissionCodesJson = JsonSerializer.Serialize(previousPermissions),
             NewPermissionCodesJson = JsonSerializer.Serialize(newPermissions)
         };
