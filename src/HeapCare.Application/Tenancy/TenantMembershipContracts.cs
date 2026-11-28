@@ -27,14 +27,15 @@ public static class OrganizationScopeTypes
 }
 
 public sealed record OrganizationScope(string ScopeType, Guid? HospitalId = null, Guid? DepartmentId = null);
-public sealed record TenantMembershipAuthorization(Guid MembershipId, string Role, IReadOnlyList<OrganizationScope> Scopes);
+public sealed record TenantMembershipAuthorization(Guid MembershipId, string Role, IReadOnlyList<OrganizationScope> Scopes, IReadOnlyList<string>? Permissions = null);
 
 public sealed record UserTenantContextDto(
     Guid TenantId,
     string TenantName,
     string TenantSlug,
     string Role,
-    IReadOnlyList<OrganizationScope> Scopes);
+    IReadOnlyList<OrganizationScope> Scopes,
+    IReadOnlyList<string>? Permissions = null);
 
 public interface ITenantMembershipReader
 {
