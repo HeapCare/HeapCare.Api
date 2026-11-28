@@ -2,6 +2,7 @@ using System.Text.Json;
 using HeapCare.Application.Tenancy;
 using HeapCare.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace HeapCare.Infrastructure.Memberships;
 
@@ -136,6 +137,9 @@ public sealed class TenantRoleAdministrationService(
         if (!TryValidateDelegatedPermissions(input.PermissionCodes, out var newPermissions, out validationError))
             return Failure<TenantRoleDto>(validationError!, 403);
 
+        if (!await LockRoleForUpdateAsync(tenantId, roleId, cancellationToken))
+            return Failure<TenantRoleDto>("Tenant role not found.", 404);
+
         var role = await db.TenantRoles
             .SingleOrDefaultAsync(
                 value => value.TenantId == tenantId && value.Id == roleId,
@@ -235,6 +239,9 @@ public sealed class TenantRoleAdministrationService(
         if (!ValidateActorAndReason(actorIssuer, actorSubject, reason, out var validationError))
             return Failure<TenantRoleDto>(validationError!, 400);
 
+        if (!await LockRoleForUpdateAsync(tenantId, roleId, cancellationToken))
+            return Failure<TenantRoleDto>("Tenant role not found.", 404);
+
         var role = await db.TenantRoles
             .SingleOrDefaultAsync(
                 value => value.TenantId == tenantId && value.Id == roleId,
@@ -284,6 +291,37 @@ public sealed class TenantRoleAdministrationService(
         }
 
         return TenantRoleAdministrationResult<TenantRoleDto>.Success(ToDto(role, permissions));
+    }
+
+    private async Task<bool> LockRoleForUpdateAsync(
+        Guid tenantId,
+        Guid roleId,
+        CancellationToken cancellationToken)
+    {
+        var transaction = db.Database.CurrentTransaction;
+        if (transaction is null)
+            throw new InvalidOperationException("Role updates require the audited request transaction.");
+
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandText = """
+            SELECT "Id" FROM "tenant_roles"
+            WHERE "TenantId" = @tenantId AND "Id" = @roleId
+            FOR UPDATE
+            """;
+
+        var tenantParameter = command.CreateParameter();
+        tenantParameter.ParameterName = "tenantId";
+        tenantParameter.Value = tenantId;
+        command.Parameters.Add(tenantParameter);
+
+        var roleParameter = command.CreateParameter();
+        roleParameter.ParameterName = "roleId";
+        roleParameter.Value = roleId;
+        command.Parameters.Add(roleParameter);
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is not null and not DBNull;
     }
 
     private bool CanManageMemberships() =>
