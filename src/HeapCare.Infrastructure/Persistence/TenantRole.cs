@@ -36,6 +36,10 @@ public sealed class TenantRoleChangeAudit : TenantOwnedEntity
     public string ActorIssuer { get; set; } = string.Empty;
     public string ActorSubject { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
+    public string PreviousName { get; set; } = string.Empty;
+    public string NewName { get; set; } = string.Empty;
+    public string PreviousDescription { get; set; } = string.Empty;
+    public string NewDescription { get; set; } = string.Empty;
     public string PreviousPermissionCodesJson { get; set; } = "[]";
     public string NewPermissionCodesJson { get; set; } = "[]";
 }
