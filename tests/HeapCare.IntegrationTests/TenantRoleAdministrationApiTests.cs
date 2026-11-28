@@ -315,6 +315,74 @@ public sealed class TenantRoleAdministrationApiTests(FacilityApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, deactivateRole.StatusCode);
     }
 
+
+    [Fact]
+    public async Task MembershipCannotBeReactivatedWhileItsCustomRoleIsInactive()
+    {
+        factory.ResetDatabase();
+        var tenantId = Guid.NewGuid();
+        await factory.SeedTenantMembershipAsync(
+            tenantId,
+            TenantRoles.HospitalAdmin,
+            subject: "rbac-reactivation-admin");
+
+        using var admin = CreateClient("rbac-reactivation-admin", tenantId);
+        var createRole = await admin.PostAsJsonAsync(
+            "/api/v1/tenant/roles",
+            new
+            {
+                name = "Temporary Reactivation Role",
+                description = "Used to verify membership and role lifecycle ordering.",
+                permissionCodes = new[] { TenantPermissions.FacilityRead },
+                reason = "Create a role for the reactivation lifecycle test."
+            });
+        Assert.Equal(HttpStatusCode.Created, createRole.StatusCode);
+        var role = await createRole.Content.ReadFromJsonAsync<TenantRoleResponse>();
+        Assert.NotNull(role);
+
+        var createMembership = await admin.PostAsJsonAsync(
+            "/api/v1/tenant/memberships",
+            new
+            {
+                issuer = TestJwtTokenFactory.Issuer,
+                subject = "rbac-reactivation-target",
+                role = role!.Code,
+                scopes = new[] { new { scopeType = OrganizationScopeTypes.Tenant } }
+            });
+        Assert.Equal(HttpStatusCode.Created, createMembership.StatusCode);
+        var membership = await createMembership.Content.ReadFromJsonAsync<TenantMembershipResponse>();
+        Assert.NotNull(membership);
+
+        var deactivateMembership = await admin.PostAsync(
+            $"/api/v1/tenant/memberships/{membership!.Id:D}/deactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.OK, deactivateMembership.StatusCode);
+
+        var deactivateRole = await admin.PostAsJsonAsync(
+            $"/api/v1/tenant/roles/{role.Id:D}/deactivate",
+            new { reason = "Retire the role while no active membership uses it." });
+        Assert.Equal(HttpStatusCode.OK, deactivateRole.StatusCode);
+
+        var blockedReactivation = await admin.PostAsync(
+            $"/api/v1/tenant/memberships/{membership.Id:D}/reactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.BadRequest, blockedReactivation.StatusCode);
+
+        var reactivateRole = await admin.PostAsJsonAsync(
+            $"/api/v1/tenant/roles/{role.Id:D}/reactivate",
+            new { reason = "Restore the role before restoring its membership." });
+        Assert.Equal(HttpStatusCode.OK, reactivateRole.StatusCode);
+
+        var reactivateMembership = await admin.PostAsync(
+            $"/api/v1/tenant/memberships/{membership.Id:D}/reactivate",
+            content: null);
+        Assert.Equal(HttpStatusCode.OK, reactivateMembership.StatusCode);
+
+        using var member = CreateClient("rbac-reactivation-target", tenantId);
+        var authorizedRead = await member.GetAsync("/api/v1/hospitals");
+        Assert.Equal(HttpStatusCode.OK, authorizedRead.StatusCode);
+    }
+
     private HttpClient CreateClient(string subject, Guid tenantId)
     {
         var client = factory.CreateClient();
