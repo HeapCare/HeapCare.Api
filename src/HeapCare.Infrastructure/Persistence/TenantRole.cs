@@ -12,6 +12,7 @@ public sealed class TenantRole : TenantOwnedEntity
     public string Description { get; set; } = string.Empty;
     public bool IsSystem { get; set; }
     public bool IsActive { get; set; } = true;
+    public int PermissionsRevision { get; set; }
 }
 
 /// <summary>
