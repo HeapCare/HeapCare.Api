@@ -40,6 +40,8 @@ public static class DependencyInjection
             services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 
         services.AddScoped<ITenantMembershipReader, TenantMembershipReader>();
+        services.AddScoped<ITenantPermissionContext, TenantPermissionContext>();
+        services.AddScoped<ITenantRoleAdministrationService, TenantRoleAdministrationService>();
         services.AddScoped<IPlatformOperatorReader, PlatformOperatorReader>();
         services.AddScoped<IPlatformOperatorBootstrapService, PlatformOperatorBootstrapService>();
         services.AddScoped<ITenantRegistryService, TenantRegistryService>();
