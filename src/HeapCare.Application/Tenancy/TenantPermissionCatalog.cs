@@ -31,7 +31,8 @@ public sealed record TenantPermissionDefinition(
     string DisplayName,
     string Description,
     TenantPermissionRisk Risk,
-    bool IsAssignable = true);
+    bool IsAssignable = true,
+    bool IsSystemOnly = false);
 
 /// <summary>
 /// Describes a system-managed baseline role retained for compatibility with existing memberships.
@@ -73,6 +74,10 @@ public static class TenantPermissionCatalog
                 AuditPermissions.Read, "Administration", "audit", "read",
                 "View audit events", "Query and export the audit events visible to the current tenant-wide scope.",
                 TenantPermissionRisk.Sensitive),
+            new TenantPermissionDefinition(
+                TenantPermissions.MembershipRoleAssignSystem, "Administration", "membership.role", "assign-system",
+                "Assign system roles", "Assign one of the five platform-approved system roles to an existing tenant member. This capability cannot be delegated through a custom role.",
+                TenantPermissionRisk.Critical, IsAssignable: false, IsSystemOnly: true),
 
             new TenantPermissionDefinition(
                 PatientPermissions.Read, "Patients", "patient", "read",
@@ -219,6 +224,7 @@ public static class TenantPermissionCatalog
                     TenantPermissions.FacilityWrite,
                     TenantPermissions.FacilityDelete,
                     TenantPermissions.MembershipManage,
+                    TenantPermissions.MembershipRoleAssignSystem,
                     AuditPermissions.Read,
                     PatientPermissions.Read,
                     PatientPermissions.IdentityRead,
