@@ -195,6 +195,10 @@ Only HospitalAdmin receives the new staff read/manage permissions in this first 
 
 See [staff module API documentation](docs/modules/staff/README.md) and [documentation PR #21](https://github.com/HeapCare/HeapCare.Doc/pull/21) for the product workflow and design boundaries.
 
+## Inpatient (IPD) API
+
+The initial inpatient ADT API supports admission creation, admission listing/detail, first-bed assignment and same-Hospital bed transfer. The routes remain protected by dedicated IPD permissions that are not currently granted to existing tenant roles. Cancellation and discharge routes are not implemented. See the [inpatient module API contract](docs/modules/inpatient/README.md) for request/response shapes, resource-scope rules, audit behavior and current access gates.
+
 ## Tenant isolation
 
 The tenant header is request context only. It is **not authentication** and does not prove that a caller may access a tenant. Facility and platform-context API routes now require a validated OIDC/JWT principal and an active HeapCare membership matching the token issuer, subject and selected tenant. Persistence requires the validated tenant context for tenant-owned writes and applies tenant query filters. Background jobs and message consumers must establish an equivalent trusted tenant context before accessing tenant-owned data. The platform context endpoint is diagnostic only.
