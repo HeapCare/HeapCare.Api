@@ -30,6 +30,32 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
         if (membership is null)
             return null;
 
+        var role = await db.TenantRoles
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(value => value.TenantId == tenantId &&
+                            value.Code == membership.Role &&
+                            value.IsActive)
+            .Select(value => new { value.Id, value.Code, value.IsSystem })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (role is null)
+            return null;
+
+        var permissions = await db.TenantRolePermissions
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(value => value.TenantId == tenantId && value.RoleId == role.Id)
+            .OrderBy(value => value.PermissionCode)
+            .Select(value => value.PermissionCode)
+            .ToArrayAsync(cancellationToken);
+
+        // Unknown or explicitly gated permissions must fail closed. In particular,
+        // IPD permissions are catalogue-known but intentionally non-assignable.
+        if (permissions.Length == 0 ||
+            permissions.Any(permission => !IsValidPermissionForRole(permission, role.IsSystem)))
+            return null;
+
         var scopes = membership.Scopes
             .OrderBy(scope => scope.ScopeType)
             .ThenBy(scope => scope.HospitalId)
@@ -37,8 +63,16 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
             .Select(scope => new OrganizationScope(scope.ScopeType, scope.HospitalId, scope.DepartmentId))
             .ToArray();
 
-        return new TenantMembershipAuthorization(membership.Id, membership.Role, scopes);
+        return new TenantMembershipAuthorization(membership.Id, role.Code, scopes, permissions);
     }
+
+    private static bool IsValidPermissionForRole(string permissionCode, bool isSystemRole)
+    {
+        var definition = TenantPermissionCatalog.Find(permissionCode);
+        return definition is not null &&
+               (definition.IsAssignable || (isSystemRole && definition.IsSystemOnly));
+    }
+
     public async Task<TenantMembershipPage<UserTenantContextDto>> ListActiveTenantContextsAsync(
         string issuer,
         string subject,
@@ -86,11 +120,46 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
             .Select(value => new { value.Id, value.Name, value.Slug })
             .ToDictionaryAsync(value => value.Id, cancellationToken);
 
+        var roleCodes = pageMemberships.Select(value => value.Role).Distinct(StringComparer.Ordinal).ToArray();
+        var roles = await db.TenantRoles
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(value => tenantIds.Contains(value.TenantId) &&
+                            roleCodes.Contains(value.Code) &&
+                            value.IsActive)
+            .Select(value => new { value.TenantId, value.Code, value.Id, value.IsSystem })
+            .ToListAsync(cancellationToken);
+        var roleIds = roles.Select(value => value.Id).ToArray();
+        var grants = await db.TenantRolePermissions
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(value => tenantIds.Contains(value.TenantId) && roleIds.Contains(value.RoleId))
+            .Select(value => new { value.TenantId, value.RoleId, value.PermissionCode })
+            .ToListAsync(cancellationToken);
+
+        var rolesByTenantAndCode = roles.ToDictionary(
+            value => (value.TenantId, value.Code),
+            value => value);
+        var grantsByRoleId = grants
+            .GroupBy(value => value.RoleId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group
+                    .Select(value => value.PermissionCode)
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToArray());
+
         var items = pageMemberships
             .Where(value => tenants.ContainsKey(value.TenantId))
             .Select(value =>
             {
                 var tenant = tenants[value.TenantId];
+                if (!rolesByTenantAndCode.TryGetValue((value.TenantId, value.Role), out var role) ||
+                    !grantsByRoleId.TryGetValue(role.Id, out var permissions) ||
+                    permissions.Count == 0 ||
+                    permissions.Any(permission => !IsValidPermissionForRole(permission, role.IsSystem)))
+                    return null;
+
                 var scopes = value.Scopes
                     .OrderBy(scope => scope.ScopeType)
                     .ThenBy(scope => scope.HospitalId)
@@ -100,12 +169,13 @@ public sealed class TenantMembershipReader(HeapCareDbContext db) : ITenantMember
                     .ToArray();
 
                 return new UserTenantContextDto(
-                    value.TenantId, tenant.Name, tenant.Slug, value.Role, scopes);
+                    value.TenantId, tenant.Name, tenant.Slug, value.Role, scopes, permissions);
             })
+            .Where(value => value is not null)
+            .Select(value => value!)
             .ToArray();
 
         return new TenantMembershipPage<UserTenantContextDto>(
             items, page.SafePage, page.SafePageSize, totalCount);
     }
-
 }

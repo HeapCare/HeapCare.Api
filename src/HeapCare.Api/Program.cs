@@ -108,6 +108,7 @@ app.MapAuditEndpoints();
 app.MapPlatformBootstrapEndpoints(app.Environment);
 app.MapPlatformTenantEndpoints();
 app.MapTenantMembershipEndpoints();
+app.MapTenantRoleEndpoints();
 app.MapUserContextEndpoints();
 app.MapHospitalEndpoints();
 app.MapDepartmentEndpoints();

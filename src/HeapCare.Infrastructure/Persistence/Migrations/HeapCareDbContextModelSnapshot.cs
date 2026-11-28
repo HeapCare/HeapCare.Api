@@ -1469,6 +1469,185 @@ namespace HeapCare.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRole", b =>
+                {
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PermissionsRevision")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasAlternateKey("TenantId", "Code");
+
+                    b.HasIndex("TenantId", "IsActive", "IsSystem");
+
+                    b.ToTable("tenant_roles", (string)null, t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_tenant_roles_permissions_revision",
+                                "\"PermissionsRevision\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PermissionCode")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RoleId", "PermissionCode")
+                        .IsUnique();
+
+                    b.ToTable("tenant_role_permissions", (string)null);
+                });
+
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRoleChangeAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ActorIssuer")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ActorSubject")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewPermissionCodesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PreviousPermissionCodesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PreviousName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NewName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PreviousDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("NewDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RoleId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "ActorIssuer", "ActorSubject", "CreatedAtUtc");
+
+                    b.ToTable("tenant_role_change_audits", null, t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_tenant_role_change_audits_action",
+                                "\"Action\" IN ('Created', 'PermissionsUpdated', 'DetailsUpdated', 'Deactivated', 'Reactivated')");
+                        });
+                });
+
             modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantMembership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1510,6 +1689,8 @@ namespace HeapCare.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "Issuer", "Subject")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "Role");
 
                     b.ToTable("tenant_memberships", (string)null);
                 });
@@ -2072,6 +2253,13 @@ namespace HeapCare.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantMembership", b =>
                 {
+                    b.HasOne("HeapCare.Infrastructure.Persistence.TenantRole", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "Role")
+                        .HasPrincipalKey("TenantId", "Code")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("HeapCare.Infrastructure.Persistence.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -2233,6 +2421,47 @@ namespace HeapCare.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("HeapCare.Infrastructure.Persistence.Room", b =>
                 {
                     b.Navigation("Beds");
+                });
+
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRole", b =>
+                {
+                    b.HasOne("HeapCare.Infrastructure.Persistence.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRolePermission", b =>
+                {
+                    b.HasOne("HeapCare.Infrastructure.Persistence.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HeapCare.Infrastructure.Persistence.TenantRole", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RoleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantRoleChangeAudit", b =>
+                {
+                    b.HasOne("HeapCare.Infrastructure.Persistence.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HeapCare.Infrastructure.Persistence.TenantRole", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RoleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("HeapCare.Infrastructure.Persistence.TenantMembership", b =>

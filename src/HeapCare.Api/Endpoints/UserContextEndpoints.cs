@@ -44,7 +44,7 @@ public static class UserContextEndpoints
                     item.TenantSlug,
                     item.Role,
                     item.Scopes,
-                    TenantRolePermissions.GetPermissions(item.Role))).ToArray();
+                    item.Permissions ?? Array.Empty<string>())).ToArray();
 
                 return Results.Ok(new TenantMembershipPage<CurrentUserTenantContextDto>(
                     items, result.Page, result.PageSize, result.TotalCount));

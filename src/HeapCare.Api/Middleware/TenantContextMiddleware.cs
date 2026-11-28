@@ -13,6 +13,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
         HttpContext context,
         ITenantContext tenantContext,
         IOrganizationScopeContext organizationScopeContext,
+        ITenantPermissionContext permissionContext,
         ITenantMembershipReader membershipReader)
     {
         var isTenantScoped = context.GetEndpoint()?.Metadata
@@ -66,7 +67,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
             return;
         }
 
-        var permissions = TenantRolePermissions.GetPermissions(membership.Role);
+        var permissions = membership.Permissions ?? Array.Empty<string>();
         if (permissions.Count == 0)
         {
             await Results.Problem(
@@ -108,6 +109,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
 
         tenantContext.SetTenant(tenantId);
         organizationScopeContext.SetMembership(membership.MembershipId, membership.Role, membership.Scopes);
+        permissionContext.SetPermissions(permissions);
 
         using (LogContext.PushProperty("TenantId", tenantId))
         using (LogContext.PushProperty("OrganizationScopeCount", membership.Scopes.Count))

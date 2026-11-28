@@ -90,7 +90,10 @@ public sealed class FacilityApiFactory : WebApplicationFactory<Program>
                 Slug = $"test-{tenantId:N}",
                 Status = TenantStatuses.Active
             });
+            await db.SaveChangesAsync();
         }
+
+        await EnsureSystemRolesSeededAsync(db, tenantId);
 
         var membership = new TenantMembership
         {
@@ -112,6 +115,70 @@ public sealed class FacilityApiFactory : WebApplicationFactory<Program>
             });
         }
         db.TenantMemberships.Add(membership);
+
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SeedSystemRolesAsync(Guid tenantId)
+    {
+        using var scope = Services.CreateScope();
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<HeapCareDbContext>();
+        if (!await db.Tenants.AnyAsync(value => value.Id == tenantId))
+            throw new InvalidOperationException("The test tenant must exist before system roles are seeded.");
+
+        await EnsureSystemRolesSeededAsync(db, tenantId);
+    }
+
+    private static async Task EnsureSystemRolesSeededAsync(HeapCareDbContext db, Guid tenantId)
+    {
+        var systemRoles = await db.TenantRoles
+            .Where(value => value.TenantId == tenantId && value.IsSystem)
+            .ToListAsync();
+
+        foreach (var definition in TenantPermissionCatalog.SystemRoles)
+        {
+            var existingRole = systemRoles.SingleOrDefault(value => value.Code == definition.Code);
+            if (existingRole is null)
+            {
+                var systemRole = new TenantRole
+                {
+                    TenantId = tenantId,
+                    Code = definition.Code,
+                    Name = definition.DisplayName,
+                    Description = definition.Description,
+                    IsSystem = true,
+                    IsActive = true,
+                    PermissionsRevision = 0
+                };
+                db.TenantRoles.Add(systemRole);
+                foreach (var permissionCode in definition.PermissionCodes)
+                {
+                    db.TenantRolePermissions.Add(new TenantRolePermission
+                    {
+                        TenantId = tenantId,
+                        RoleId = systemRole.Id,
+                        PermissionCode = permissionCode
+                    });
+                }
+                continue;
+            }
+
+            if (!existingRole.IsActive)
+                throw new InvalidOperationException($"Test system role '{definition.Code}' must be active.");
+
+            var existingGrants = await db.TenantRolePermissions
+                .Where(value => value.TenantId == tenantId && value.RoleId == existingRole.Id)
+                .Select(value => value.PermissionCode)
+                .ToArrayAsync();
+            if (!existingGrants.ToHashSet(StringComparer.Ordinal).SetEquals(definition.PermissionCodes))
+                throw new InvalidOperationException($"Test system role '{definition.Code}' grants do not match the canonical catalog.");
+        }
+
+        if (systemRoles.Any(value =>
+            !TenantPermissionCatalog.SystemRoles.Any(definition => definition.Code == value.Code)))
+            throw new InvalidOperationException("The test tenant contains an unknown system role.");
 
         await db.SaveChangesAsync();
     }

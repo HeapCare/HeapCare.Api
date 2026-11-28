@@ -40,6 +40,9 @@ public sealed class HeapCareDbContext(
     public DbSet<BillingPayment> BillingPayments => Set<BillingPayment>();
     public DbSet<InpatientAdmission> InpatientAdmissions => Set<InpatientAdmission>();
     public DbSet<InpatientBedPlacement> InpatientBedPlacements => Set<InpatientBedPlacement>();
+    public DbSet<TenantRole> TenantRoles => Set<TenantRole>();
+    public DbSet<TenantRolePermission> TenantRolePermissions => Set<TenantRolePermission>();
+    public DbSet<TenantRoleChangeAudit> TenantRoleChangeAudits => Set<TenantRoleChangeAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,6 +66,12 @@ public sealed class HeapCareDbContext(
         modelBuilder.Entity<Room>().HasOne<Tenant>().WithMany()
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Bed>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<TenantRole>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<TenantRolePermission>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<TenantRoleChangeAudit>().HasOne<Tenant>().WithMany()
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<TenantMembership>().HasOne<Tenant>().WithMany()
             .HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -172,6 +181,27 @@ public sealed class HeapCareDbContext(
             }
             else if (entry.State == EntityState.Deleted)
                 throw new InvalidOperationException("Platform records cannot be physically deleted.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<TenantRole>())
+        {
+            if (entry.State == EntityState.Deleted)
+                throw new InvalidOperationException("Tenant roles are retained and must be deactivated instead of deleted.");
+            if (entry.State == EntityState.Modified &&
+                (entry.Property(nameof(TenantRole.IsSystem)).OriginalValue is true || entry.Entity.IsSystem))
+                throw new InvalidOperationException("System tenant roles are immutable and cannot be converted to custom roles.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<TenantRoleChangeAudit>())
+        {
+            if (entry.State == EntityState.Added &&
+                (string.IsNullOrWhiteSpace(entry.Entity.Action) ||
+                 string.IsNullOrWhiteSpace(entry.Entity.ActorIssuer) ||
+                 string.IsNullOrWhiteSpace(entry.Entity.ActorSubject) ||
+                 string.IsNullOrWhiteSpace(entry.Entity.Reason)))
+                throw new InvalidOperationException("A tenant role change audit requires an action, actor and reason.");
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+                throw new InvalidOperationException("Tenant role change history is append-only.");
         }
 
         foreach (var entry in ChangeTracker.Entries<InpatientAdmission>())
