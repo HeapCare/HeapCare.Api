@@ -484,20 +484,29 @@ public sealed class TenantMembershipAdministrationService(
             .ToArrayAsync(cancellationToken);
 
         if (permissions.Length == 0 ||
-            permissions.Any(permission => !TenantPermissionCatalog.IsAssignable(permission)))
+            permissions.Any(permission =>
+            {
+                var definition = TenantPermissionCatalog.Find(permission);
+                return definition is null ||
+                       (!definition.IsAssignable && !(role.IsSystem && definition.IsSystemOnly));
+            }))
             return RoleAssignmentValidation.Failure(
                 "The requested tenant role contains no valid grants or includes a gated permission.",
                 409);
 
-        // The five immutable system roles were pre-approved by the platform's
-        // tenant role model and were assignable by membership administrators before
-        // persisted RBAC. Preserve that compatibility, including the clinical role.
-        // Custom roles remain subject to strict permission-subset delegation.
-        if (!role.IsSystem &&
-            permissions.Any(permission => !permissionContext.HasPermission(permission)))
+        if (role.IsSystem)
+        {
+            if (!permissionContext.HasPermission(TenantPermissions.MembershipRoleAssignSystem))
+                return RoleAssignmentValidation.Failure(
+                    "Only administrators with explicit system-role assignment authority may assign a system role.",
+                    403);
+        }
+        else if (permissions.Any(permission => !permissionContext.HasPermission(permission)))
+        {
             return RoleAssignmentValidation.Failure(
                 "You cannot assign a custom role that grants permissions beyond your own delegated authority.",
                 403);
+        }
 
         return RoleAssignmentValidation.Success();
     }
