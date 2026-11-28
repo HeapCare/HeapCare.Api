@@ -12,6 +12,25 @@ public sealed class TenantRoleAdministrationService(
     IOrganizationScopeContext organizationScopeContext,
     ITenantPermissionContext permissionContext) : ITenantRoleAdministrationService
 {
+    public Task<IReadOnlyList<TenantPermissionDefinition>> ListAssignablePermissionsAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!CanManageMemberships())
+            return Task.FromResult<IReadOnlyList<TenantPermissionDefinition>>(Array.Empty<TenantPermissionDefinition>());
+
+        IReadOnlyList<TenantPermissionDefinition> permissions = TenantPermissionCatalog.Definitions
+            .Where(definition =>
+                definition.IsAssignable &&
+                permissionContext.HasPermission(definition.Code))
+            .OrderBy(definition => definition.Module, StringComparer.Ordinal)
+            .ThenBy(definition => definition.Resource, StringComparer.Ordinal)
+            .ThenBy(definition => definition.Action, StringComparer.Ordinal)
+            .ToArray();
+
+        return Task.FromResult(permissions);
+    }
+
     public async Task<IReadOnlyList<TenantRoleDto>> ListAsync(CancellationToken cancellationToken)
     {
         if (!CanManageMemberships())
