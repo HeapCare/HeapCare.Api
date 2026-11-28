@@ -218,9 +218,8 @@ public sealed class TenantMembershipAdministrationService(
             return Failure<TenantMembershipDto>("A non-empty membership identifier is required.", 400);
         if (organizationScopeContext.MembershipId == membershipId)
             return Failure<TenantMembershipDto>("Administrators cannot modify their own membership.", 409);
-        var roleValidation = await ValidateRoleAssignmentAsync(input.Role, tenantId, cancellationToken);
-        if (roleValidation.Error is not null)
-            return Failure<TenantMembershipDto>(roleValidation.Error, roleValidation.StatusCode);
+        if (string.IsNullOrWhiteSpace(input.Role) || input.Role.Length > 50)
+            return Failure<TenantMembershipDto>("A valid tenant role code is required.", 400);
 
         var membership = await db.TenantMemberships.Include(value => value.Scopes)
             .SingleOrDefaultAsync(value => value.Id == membershipId, cancellationToken);
@@ -230,6 +229,16 @@ public sealed class TenantMembershipAdministrationService(
             return Failure<TenantMembershipDto>(
                 "The membership is outside your assigned organization scope.",
                 404);
+
+        // Scope-only edits may retain an existing role whose full grants exceed
+        // this administrator's delegated set. A role change is always validated
+        // against the actor's current permission set.
+        if (!string.Equals(membership.Role, input.Role, StringComparison.Ordinal))
+        {
+            var roleValidation = await ValidateRoleAssignmentAsync(input.Role, tenantId, cancellationToken);
+            if (roleValidation.Error is not null)
+                return Failure<TenantMembershipDto>(roleValidation.Error, roleValidation.StatusCode);
+        }
 
         var resolution = await ResolveScopesAsync(input.Scopes, cancellationToken);
         if (resolution.Error is not null)
